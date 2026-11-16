@@ -13,14 +13,14 @@
         input[type="text"] { width: 100%; padding: 10px; margin: 8px 0 15px 0; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
         button { background-color: #007BFF; color: white; border: none; padding: 12px 20px; font-size: 16px; border-radius: 4px; cursor: pointer; width: 100%; margin-top: 5px; }
         button:hover { background-color: #0056b3; }
+        button:disabled { background-color: #6c757d; cursor: not-allowed; }
     </style>
 </head>
 <body>
 
     <!-- ÉTAPE 1 : Accueil et vérification robot -->
     <div class="carte">
-        <h1>Bienvenue sur Plmiamis Project 
-            "pejy lafatra ho an'ny mpandeha iaraha-misitraka"</h1>
+        <h1>Bienvenue sur Plmiamis Project<br>"pejy lafatra ho an'ny mpandeha iaraha-misitraka"</h1>
         <hr>
         <label style="font-size: 18px; cursor: pointer;">
             <input type="checkbox" id="check-robot"> Je confirme que je ne suis pas un robot
@@ -48,14 +48,14 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
         import { getFirestore, collection, addDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-        // CONFIGURATION FIREBASE ICI
         const firebaseConfig = {
-            apiKey: "VOTRE_API_KEY",
-            authDomain: "VOTRE_PROJECT_ID.firebaseapp.com",
-            projectId: "VOTRE_PROJECT_ID",
-            storageBucket: "VOTRE_PROJECT_ID.appspot.com",
-            messagingSenderId: "VOTRE_SENDER_ID",
-            appId: "VOTRE_APP_ID"
+            apiKey: "AIzaSyBfqHb8FTnSgtwhcUqyTulDtf7OojIfDds",
+            authDomain: "fitia-plmiamis-project.firebaseapp.com",
+            projectId: "fitia-plmiamis-project",
+            storageBucket: "fitia-plmiamis-project.firebasestorage.app",
+            messagingSenderId: "793354510655",
+            appId: "1:793354510655:web:9b4d8257d24a5f9809f38a",
+            measurementId: "G-15BMY8RYQ8"
         };
 
         const app = initializeApp(firebaseConfig);
@@ -75,7 +75,7 @@
             btn.innerText = "Envoi en cours...";
 
             const busSelectionne = document.querySelector('input[name="bus"]:checked').value;
-            const nom = document.getElementById("nom-utilisateur").value;
+            const nom = document.getElementById("nom-utilisateur").value.trim();
 
             try {
                 await addDoc(collection(db, "plaintes"), {
@@ -84,14 +84,14 @@
                     date: new Date().toISOString()
                 });
                 document.getElementById("message-confirmation").innerText = `Merci ${nom}, votre plainte contre le ${busSelectionne} a bien été envoyée !`;
-                document.getElementById("nom-utilisateur").value = "";
+                document.getElementById("form-plainte").reset();
             } catch (erreur) {
                 alert("Erreur lors de l'envoi. Vérifiez votre configuration Firebase.");
                 console.error(erreur);
+            } finally {
+                btn.disabled = false;
+                btn.innerText = "Envoyer la plainte";
             }
-
-            btn.disabled = false;
-            btn.innerText = "Envoyer la plainte";
         });
     </script>
 </body>
