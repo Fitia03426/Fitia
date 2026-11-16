@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin - Plmiamis Project</title>
+    <style>
+        body { font-family: Arial, sans-serif; background-color: #f4f6f9; color: #333; max-width: 600px; margin: 40px auto; padding: 20px; }
+        .carte { background: white; padding: 25px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        .cache { display: none; }
+        input[type="email"], input[type="password"] { width: 100%; padding: 10px; margin: 8px 0 15px 0; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+        button { background-color: #343a40; color: white; border: none; padding: 12px 20px; font-size: 16px; border-radius: 4px; cursor: pointer; width: 100%; margin-top: 5px; }
+        button:hover { opacity: 0.9; }
+        .boite-reception { background-color: #e9ecef; border-left: 5px solid #28a745; padding: 15px; margin-top: 15px; border-radius: 5px; }
+        .alerte-bus { background: white; padding: 12px; margin-top: 10px; border-radius: 4px; border: 1px solid #ddd; }
+        .btn-arduino { background-color: #28a745; margin-bottom: 10px; }
+        .btn-deconnexion { background-color: #dc3545; margin-top: 20px; }
+    </style>
+</head>
+<body>
+
+    <div class="carte">
+        <h2>Espace Administrateur</h2>
+
+        <!-- Formulaire de connexion sécurisé -->
+        <form id="form-connexion">
+            <input type="email" id="email-admin" placeholder="E-mail administrateur..." required>
+            <input type="password" id="mdp-admin" placeholder="Mot de passe..." required>
+            <button type="submit">Se connecter</button>
+        </form>
+
+        <!-- Boîte de réception (visible uniquement une fois authentifié) -->
+        <div id="zone-boite-reception" class="boite-reception cache">
+            <h3>Boîte de réception en direct</h3>
+
+            <button type="button" id="btn-arduino" class="btn-arduino">🔌 Connecter la LED verte (Arduino USB)</button>
+            <p id="statut-arduino" style="font-size: 13px; color: #555; margin-top: 0;">Statut Arduino : Non connecté</p>
+
+            <p><small>Bus ayant reçu <strong>4 plaintes ou plus</strong> :</small></p>
+            <div id="liste-reception">Chargement...</div>
+
+            <button type="button" id="btn-deconnexion" class="btn-deconnexion">Se déconnecter</button>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://gstatic.com";
+        import { getFirestore, collection, onSnapshot } from "https://gstatic.com";
+        import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://gstatic.com";
+
+        // COLLEZ LA MÊME CONFIGURATION FIREBASE ICI
+        const firebaseConfig = {
+            apiKey: "VOTRE_API_KEY",
+            authDomain: "VOTRE_PROJECT_://firebaseapp.com",
+            projectId: "VOTRE_PROJECT_ID",
+            storageBucket: "VOTRE_PROJECT_://appspot.com",
+            messagingSenderId: "VOTRE_SENDER_ID",
+            appId: "VOTRE_APP_ID"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
+
+        let redacteurSerie = null;
+        let alerteActive = false;
+
+        // Surveille automatiquement l'état de connexion de l'admin
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                document.getElementById("form-connexion").classList.add("cache");
+                document.getElementById("zone-boite-reception").classList.remove("cache");
+                ecouterBoiteReceptionEnDirect();
+            } else {
+                document.getElementById("form-connexion").classList.remove("cache");
+                document.getElementById("zone-boite-reception").classList.add("cache");
+            }
+        });
+
+        // Connexion via Firebase Auth
+        document.getElementById("form-connexion").addEventListener("submit", async function(e) {
+            e.preventDefault();
+            const email = document.getElementById("email-admin").value;
+            const mdp = document.getElementById("mdp-admin").value;
+
+            try {
+                await signInWithEmailAndPassword(auth, email, mdp);
+            } catch (erreur) {
+                alert("Identifiants incorrects ou accès refusé.");
+                console.error(erreur);
+            }
+        });
+
+        // Déconnexion
+        document.getElementById("btn-deconnexion").addEventListener("click", () => {
+            signOut(auth);
+        });
+
+        // Connexion au port USB de l'Arduino
+        document.getElementById("btn-arduino").addEventListener("click", async function() {
+            try {
+                const portSerie = await navigator.serial.requestPort();
+                await portSerie.open({ baudRate: 115200 });
+                const encodeur = new TextEncoderStream();
+                encodeur.readable.pipeTo(portSerie.writable);
+                redacteurSerie = encodeur.writable.getWriter();
+
+                document.getElementById("statut-arduino").innerText = "Statut Arduino : ✅ Connecté (Broche 12 prête)";
+                document.getElementById("btn-arduino").style.display = "none";
+
+                await envoyerOrdreArduino(alerteActive ? "V" : "E");
+            } catch (erreur) {
+                alert("Erreur USB : Utilisez Chrome/Edge et fermez le Moniteur Série Arduino.");
+                console.error(erreur);
+            }
+        });
+
+        async function envoyerOrdreArduino(lettre) {
+            if (redacteurSerie) {
+                await redacteurSerie.write(lettre);
+            }
+        }
+
+        // Écoute en temps réel de Firebase
+        function ecouterBoiteReceptionEnDirect() {
+            const conteneur = document.getElementById("liste-reception");
+            conteneur.innerHTML = "Connexion au flux en direct...";
+
+            onSnapshot(collection(db, "plaintes"), (querySnapshot) => {
+                let compteurBus = {};
+
+                querySnapshot.forEach((doc) => {
+                    const data = doc.data();
+                    if (!compteurBus[data.bus]) {
+                        compteurBus[data.bus] = { total: 0, noms: [] };
+                    }
+                    compteurBus[data.bus].total += 1;
+                    compteurBus[data.bus].noms.push(data.nom);
+                });
+
+                conteneur.innerHTML = "";
+                alerteActive = false;
+
+                for (const bus in compteurBus) {
+                    if (compteurBus[bus].total >= 4) {
+                        alerteActive = true;
+                        const div = document.createElement("div");
+                        div.className = "alerte-bus";
+                        div.innerHTML = `
+                            <strong>🚨 ALERTE : ${bus}</strong><br>
+                            Total des plaintes : <strong>${compteurBus[bus].total}</strong><br>
+                            Plaignants : ${compteurBus[bus].noms.join(", ")}
+                        `;
+                        conteneur.appendChild(div);
+                    }
+                }
+
+                if (alerteActive) {
+                    envoyerOrdreArduino("V");
+                } else {
+                    conteneur.innerHTML = "<p><em>Aucun bus n'a encore atteint le seuil de 4 plaintes.</em></p>";
+                    envoyerOrdreArduino("E");
+                }
+            });
+        }
+    </script>
+</body>
+</html>
